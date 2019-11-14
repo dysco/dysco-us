@@ -1,0 +1,398 @@
+import os
+
+secure = int($SECURE!'0')
+case = int($CASE!'0')
+
+assert(0 <= secure <= 1)
+
+#TOPOLOGY
+#    m1	 m2		 m3  m4
+#     \  /	          \  /
+#LA -- L3 -----  NAT ----- L3 -- RA 
+#      |     	     	   |
+#   proxy1	        proxy2
+
+#CASES:
+# 0: LA - NAT - RA             (no reconfiguration)
+# 1: LA - Proxy - NAT - RA     (proxy removal)
+# 2: LA - NAT - Proxy - RA     (proxy removal)
+# 3: LA - NAT - RA             (LA - MB1 - NAT - RA)
+# 4: LA - MB1 - NAT - RA       (LA - NAT - RA)
+# 5: LA - NAT - RA             (LA - NAT - MB3 - RA)
+# 6: LA - NAT - MB3 - RA       (LA - NAT - RA)
+# 7: LA - NAT - RA             (LA - MB1 - NAT - MB3 - RA)
+
+os.system('ip netns del LA > /dev/null 2>/dev/null')
+os.system('ip netns del RA > /dev/null 2>/dev/null')
+os.system('ip netns del m1 > /dev/null 2>/dev/null')
+os.system('ip netns del m2 > /dev/null 2>/dev/null')
+os.system('ip netns del m3 > /dev/null 2>/dev/null')
+os.system('ip netns del m4 > /dev/null 2>/dev/null')
+os.system('ip netns del nat > /dev/null 2>/dev/null')
+os.system('ip netns del proxy1 > /dev/null 2>/dev/null')
+os.system('ip netns del proxy2 > /dev/null 2>/dev/null')
+os.system('ip netns add LA > /dev/null 2>/dev/null')
+os.system('ip netns add RA > /dev/null 2>/dev/null')
+os.system('ip netns add m1 > /dev/null 2>/dev/null')
+os.system('ip netns add m2 > /dev/null 2>/dev/null')
+os.system('ip netns add m3 > /dev/null 2>/dev/null')
+os.system('ip netns add m4 > /dev/null 2>/dev/null')
+os.system('ip netns add nat > /dev/null 2>/dev/null')
+os.system('ip netns add proxy1 > /dev/null 2>/dev/null')
+os.system('ip netns add proxy2 > /dev/null 2>/dev/null')
+
+os.system('ifconfig lo up')
+os.system('echo 1 > /proc/sys/net/ipv4/ip_forward')
+
+port_LA::VPort(ifname='LA', netns='/var/run/netns/LA', ip_addrs=['10.0.1.1/24'])
+port_nat0::VPort(ifname='nat-int', netns='/var/run/netns/nat', ip_addrs=['10.0.0.1/24'])
+port_nat1::VPort(ifname='nat-ext', netns='/var/run/netns/nat', ip_addrs=['192.168.1.1/24'])
+port_m1_0::VPort(ifname='m1-0', netns='/var/run/netns/m1', ip_addrs=['10.0.2.1/24'])
+port_m1_1::VPort(ifname='m1-1', netns='/var/run/netns/m1', ip_addrs=['10.0.3.1/24'])
+port_m2_0::VPort(ifname='m2-0', netns='/var/run/netns/m2', ip_addrs=['10.0.4.1/24'])
+port_m2_1::VPort(ifname='m2-1', netns='/var/run/netns/m2', ip_addrs=['10.0.5.1/24'])
+port_m3_0::VPort(ifname='m3-0', netns='/var/run/netns/m3', ip_addrs=['192.168.2.1/24'])
+port_m3_1::VPort(ifname='m3-1', netns='/var/run/netns/m3', ip_addrs=['192.168.3.1/24'])
+port_m4_0::VPort(ifname='m4-0', netns='/var/run/netns/m4', ip_addrs=['192.168.12.1/24'])
+port_m4_1::VPort(ifname='m4-1', netns='/var/run/netns/m4', ip_addrs=['192.168.13.1/24'])
+port_proxy1_0::VPort(ifname='proxy1-0', netns='/var/run/netns/proxy1', ip_addrs=['10.0.6.1/24'])
+port_proxy1_1::VPort(ifname='proxy1-1', netns='/var/run/netns/proxy1', ip_addrs=['10.0.7.1/24'])
+port_proxy2_0::VPort(ifname='proxy2-0', netns='/var/run/netns/proxy2', ip_addrs=['192.168.6.1/24'])
+port_proxy2_1::VPort(ifname='proxy2-1', netns='/var/run/netns/proxy2', ip_addrs=['192.168.7.1/24'])
+port_RA::VPort(ifname='RA', netns='/var/run/netns/RA', ip_addrs=['192.168.4.1/24'])
+
+os.system('ip netns exec LA ifconfig lo up')
+os.system('ip netns exec LA ifconfig LA down')
+os.system('ip netns exec LA ifconfig LA hw ether 00:00:00:00:00:01')
+os.system('ip netns exec LA ifconfig LA up')
+os.system('ip netns exec LA route add default gw 10.0.1.254 > /dev/null')
+os.system('ip netns exec LA arp -s 10.0.1.254 00:00:00:00:00:01 > /dev/null')
+#os.system('ip netns exec LA bash -c "echo 0 > /proc/sys/net/ipv4/tcp_timestamps"')
+os.system('ip netns exec m1 ifconfig lo up')
+os.system('ip netns exec m1 ifconfig m1-0 down')
+os.system('ip netns exec m1 ifconfig m1-1 down')
+os.system('ip netns exec m1 ifconfig m1-0 hw ether 00:00:00:00:00:01')
+os.system('ip netns exec m1 ifconfig m1-1 hw ether 00:00:00:00:00:01')
+os.system('ip netns exec m1 ifconfig m1-0 up')
+os.system('ip netns exec m1 ifconfig m1-1 up')
+os.system('ip netns exec m1 route add -net 10.0.0.0/16 gw 10.0.2.254 > /dev/null')
+os.system('ip netns exec m1 route add default gw 10.0.3.254 > /dev/null')
+os.system('ip netns exec m1 arp -s 10.0.2.254 00:00:00:00:00:01 > /dev/null')
+os.system('ip netns exec m1 arp -s 10.0.3.254 00:00:00:00:00:01 > /dev/null')
+os.system('ip netns exec m2 ifconfig lo up')
+os.system('ip netns exec m2 ifconfig m2-0 down')
+os.system('ip netns exec m2 ifconfig m2-1 down')
+os.system('ip netns exec m2 ifconfig m2-0 hw ether 00:00:00:00:00:01')
+os.system('ip netns exec m2 ifconfig m2-1 hw ether 00:00:00:00:00:01')
+os.system('ip netns exec m2 ifconfig m2-0 up')
+os.system('ip netns exec m2 ifconfig m2-1 up')
+os.system('ip netns exec m2 route add -net 10.0.1.0/24 gw 10.0.4.254 > /dev/null')
+os.system('ip netns exec m2 route add -net 10.0.2.0/24 gw 10.0.4.254 > /dev/null')
+os.system('ip netns exec m2 route add default gw 10.0.5.254 > /dev/null')
+os.system('ip netns exec m2 arp -s 10.0.4.254 00:00:00:00:00:01 > /dev/null')
+os.system('ip netns exec m2 arp -s 10.0.5.254 00:00:00:00:00:01 > /dev/null')
+
+os.system('ip netns exec proxy1 ifconfig lo up')
+os.system('ip netns exec proxy1 ifconfig proxy1-0 down')
+os.system('ip netns exec proxy1 ifconfig proxy1-1 down')
+os.system('ip netns exec proxy1 ifconfig proxy1-0 hw ether 00:00:00:00:00:01')
+os.system('ip netns exec proxy1 ifconfig proxy1-1 hw ether 00:00:00:00:00:01')
+os.system('ip netns exec proxy1 ifconfig proxy1-0 up')
+os.system('ip netns exec proxy1 ifconfig proxy1-1 up')
+os.system('ip netns exec proxy1 route add -net 10.0.1.0/24 gw 10.0.6.254 > /dev/null')
+os.system('ip netns exec proxy1 route add -net 10.0.2.0/24 gw 10.0.6.254 > /dev/null')
+os.system('ip netns exec proxy1 route add -net 10.0.4.0/24 gw 10.0.6.254 > /dev/null')
+os.system('ip netns exec proxy1 route add default gw 10.0.7.254 > /dev/null')
+os.system('ip netns exec proxy1 arp -s 10.0.6.254 00:00:00:00:00:01 > /dev/null')
+os.system('ip netns exec proxy1 arp -s 10.0.7.254 00:00:00:00:00:01 > /dev/null')
+
+os.system('ip netns exec m3 ifconfig lo up')
+os.system('ip netns exec m3 ifconfig m3-0 down')
+os.system('ip netns exec m3 ifconfig m3-1 down')
+os.system('ip netns exec m3 ifconfig m3-0 hw ether 00:00:00:00:00:01')
+os.system('ip netns exec m3 ifconfig m3-1 hw ether 00:00:00:00:00:01')
+os.system('ip netns exec m3 ifconfig m3-0 up')
+os.system('ip netns exec m3 ifconfig m3-1 up')
+os.system('ip netns exec m3 route add -net 192.168.1.0/24 gw 192.168.2.254 > /dev/null')
+os.system('ip netns exec m3 route add default gw 192.168.3.254 > /dev/null')
+os.system('ip netns exec m3 arp -s 192.168.2.254 00:00:00:00:00:01 > /dev/null')
+os.system('ip netns exec m3 arp -s 192.168.3.254 00:00:00:00:00:01 > /dev/null')
+os.system('ip netns exec m4 ifconfig lo up')
+os.system('ip netns exec m4 ifconfig m4-0 down')
+os.system('ip netns exec m4 ifconfig m4-1 down')
+os.system('ip netns exec m4 ifconfig m4-0 hw ether 00:00:00:00:00:01')
+os.system('ip netns exec m4 ifconfig m4-1 hw ether 00:00:00:00:00:01')
+os.system('ip netns exec m4 ifconfig m4-0 up')
+os.system('ip netns exec m4 ifconfig m4-1 up')
+os.system('ip netns exec m4 route add -net 192.168.1.0/24 gw 192.168.12.254 > /dev/null')
+os.system('ip netns exec m4 route add default gw 192.168.13.254 > /dev/null')
+os.system('ip netns exec m4 arp -s 192.168.12.254 00:00:00:00:00:01 > /dev/null')
+os.system('ip netns exec m4 arp -s 192.168.13.254 00:00:00:00:00:01 > /dev/null')
+
+os.system('ip netns exec proxy2 ifconfig lo up')
+os.system('ip netns exec proxy2 ifconfig proxy2-0 down')
+os.system('ip netns exec proxy2 ifconfig proxy2-1 down')
+os.system('ip netns exec proxy2 ifconfig proxy2-0 hw ether 00:00:00:00:00:01')
+os.system('ip netns exec proxy2 ifconfig proxy2-1 hw ether 00:00:00:00:00:01')
+os.system('ip netns exec proxy2 ifconfig proxy2-0 up')
+os.system('ip netns exec proxy2 ifconfig proxy2-1 up')
+os.system('ip netns exec proxy2 route add -net 192.168.1.0/24 gw 192.168.6.254 > /dev/null')
+os.system('ip netns exec proxy2 route add -net 192.168.2.0/24 gw 192.168.6.254 > /dev/null')
+os.system('ip netns exec proxy2 route add -net 192.168.12.0/24 gw 192.168.6.254 > /dev/null')
+os.system('ip netns exec proxy2 route add default gw 192.168.7.254 > /dev/null')
+os.system('ip netns exec proxy2 arp -s 192.168.6.254 00:00:00:00:00:01 > /dev/null')
+os.system('ip netns exec proxy2 arp -s 192.168.7.254 00:00:00:00:00:01 > /dev/null')
+
+os.system('ip netns exec RA ifconfig lo up')
+os.system('ip netns exec RA ifconfig RA down')
+os.system('ip netns exec RA ifconfig RA hw ether 00:00:00:00:00:01')
+os.system('ip netns exec RA ifconfig RA up')
+os.system('ip netns exec RA route add default gw 192.168.4.254 > /dev/null')
+os.system('ip netns exec RA arp -s 192.168.4.254 00:00:00:00:00:01 > /dev/null')
+#os.system('ip netns exec RA bash -c "echo 0 > /proc/sys/net/ipv4/tcp_timestamps"')
+
+os.system('ip netns exec nat ifconfig lo up > /dev/null')
+os.system('ip netns exec nat ifconfig nat-int down')
+os.system('ip netns exec nat ifconfig nat-ext down')
+os.system('ip netns exec nat ifconfig nat-int hw ether 00:00:00:00:00:01')
+os.system('ip netns exec nat ifconfig nat-ext hw ether 00:00:00:00:00:01')
+os.system('ip netns exec nat ifconfig nat-int up')
+os.system('ip netns exec nat ifconfig nat-ext up')
+os.system('ip netns exec nat route add -net 10.0.0.0/16 gw 10.0.0.254 > /dev/null')
+os.system('ip netns exec nat route add default gw 192.168.1.254 > /dev/null')
+os.system('ip netns exec nat arp -s 10.0.0.254 00:00:00:00:00:01 > /dev/null')
+os.system('ip netns exec nat arp -s 192.168.1.254 00:00:00:00:00:01 > /dev/null')
+os.system('ip netns exec nat iptables -P FORWARD DROP > /dev/null')
+os.system('ip netns exec nat iptables -t nat -A POSTROUTING -o nat-ext -j MASQUERADE > /dev/null')
+os.system('ip netns exec nat iptables -t filter -A FORWARD -i nat-ext -o nat-int -m state --state RELATED,ESTABLISHED -j ACCEPT > /dev/null')
+os.system('ip netns exec nat iptables -t filter -A FORWARD -i nat-int -o nat-ext -j ACCEPT > /dev/null')
+os.system('ip netns exec nat bash -c "echo 1 > /proc/sys/net/netfilter/nf_conntrack_tcp_be_liberal"')
+
+os.system('ip netns exec LA sh ~/disable_ipv6.sh > /dev/null')
+os.system('ip netns exec RA sh ~/disable_ipv6.sh > /dev/null')
+os.system('ip netns exec m1 sh ~/disable_ipv6.sh > /dev/null')
+os.system('ip netns exec m2 sh ~/disable_ipv6.sh > /dev/null')
+os.system('ip netns exec m3 sh ~/disable_ipv6.sh > /dev/null')
+os.system('ip netns exec m4 sh ~/disable_ipv6.sh > /dev/null')
+os.system('ip netns exec nat sh ~/disable_ipv6.sh > /dev/null')
+os.system('ip netns exec proxy1 sh ~/disable_ipv6.sh > /dev/null')
+os.system('ip netns exec proxy2 sh ~/disable_ipv6.sh > /dev/null')
+
+ipfwd1::IPLookup()
+ipfwd1.add(prefix='10.0.0.0', prefix_len=24, gate=0)
+ipfwd1.add(prefix='10.0.1.0', prefix_len=24, gate=1)
+ipfwd1.add(prefix='10.0.2.0', prefix_len=24, gate=2)
+ipfwd1.add(prefix='10.0.3.0', prefix_len=24, gate=3)
+ipfwd1.add(prefix='10.0.4.0', prefix_len=24, gate=4)
+ipfwd1.add(prefix='10.0.5.0', prefix_len=24, gate=5)
+ipfwd1.add(prefix='0.0.0.0', prefix_len=0, gate=6)
+ipfwd1.add(prefix='10.0.6.0', prefix_len=24, gate=7)
+ipfwd1.add(prefix='10.0.7.0', prefix_len=24, gate=8)
+
+ipfwd2::IPLookup()
+ipfwd2.add(prefix='192.168.1.0', prefix_len=24, gate=0)
+ipfwd2.add(prefix='192.168.4.0', prefix_len=24, gate=1)
+ipfwd2.add(prefix='192.168.2.0', prefix_len=24, gate=2)
+ipfwd2.add(prefix='192.168.3.0', prefix_len=24, gate=3)
+ipfwd2.add(prefix='192.168.12.0', prefix_len=24, gate=4)
+ipfwd2.add(prefix='192.168.13.0', prefix_len=24, gate=5)
+ipfwd2.add(prefix='0.0.0.0', prefix_len=0, gate=6)
+ipfwd2.add(prefix='192.168.6.0', prefix_len=24, gate=7)
+ipfwd2.add(prefix='192.168.7.0', prefix_len=24, gate=8)
+
+pi0=PortInc(name='port_inc0', port='port_LA', prefetch=True)
+pi1=PortInc(name='port_inc1', port='port_nat0', prefetch=True)
+pi2=PortInc(name='port_inc2', port='port_nat1', prefetch=True)
+pi3=PortInc(name='port_inc3', port='port_m1_0', prefetch=True)
+pi4=PortInc(name='port_inc4', port='port_m1_1', prefetch=True)
+pi5=PortInc(name='port_inc5', port='port_m2_0', prefetch=True)
+pi6=PortInc(name='port_inc6', port='port_m2_1', prefetch=True)
+pi7=PortInc(name='port_inc7', port='port_m3_0', prefetch=True)
+pi8=PortInc(name='port_inc8', port='port_m3_1', prefetch=True)
+pi9=PortInc(name='port_inc9', port='port_m4_0', prefetch=True)
+pi10=PortInc(name='port_inc10', port='port_m4_1', prefetch=True)
+pi11=PortInc(name='port_inc11', port='port_RA', prefetch=True)
+
+pi12=PortInc(name='port_inc12', port='port_proxy1_0')
+pi13=PortInc(name='port_inc13', port='port_proxy1_1')
+pi14=PortInc(name='port_inc14', port='port_proxy2_0')
+pi15=PortInc(name='port_inc15', port='port_proxy2_1')
+
+po0=PortOut(name='port_out0', port='port_LA')
+po1=PortOut(name='port_out1', port='port_nat0')
+po2=PortOut(name='port_out2', port='port_nat1')
+po3=PortOut(name='port_out3', port='port_m1_0')
+po4=PortOut(name='port_out4', port='port_m1_1')
+po5=PortOut(name='port_out5', port='port_m2_0')
+po6=PortOut(name='port_out6', port='port_m2_1')
+po7=PortOut(name='port_out7', port='port_m3_0')
+po8=PortOut(name='port_out8', port='port_m3_1')
+po9=PortOut(name='port_out9', port='port_m4_0')
+po10=PortOut(name='port_out10', port='port_m4_1')
+po11=PortOut(name='port_out11', port='port_RA')
+
+po12=PortOut(name='port_out12', port='port_proxy1_0')
+po13=PortOut(name='port_out13', port='port_proxy1_1')
+po14=PortOut(name='port_out14', port='port_proxy2_0')
+po15=PortOut(name='port_out15', port='port_proxy2_1')
+
+dyscocenter::DyscoCenter()
+
+dout0=DyscoAgentOut(name='dout0', ns='/var/run/netns/LA')
+dout1=DyscoAgentOut(name='dout1', ns='/var/run/netns/m1')
+dout2=DyscoAgentOut(name='dout2', ns='/var/run/netns/m1')
+dout3=DyscoAgentOut(name='dout3', ns='/var/run/netns/m2')
+dout4=DyscoAgentOut(name='dout4', ns='/var/run/netns/m2')
+dout5=DyscoAgentOut(name='dout5', ns='/var/run/netns/m3')
+dout6=DyscoAgentOut(name='dout6', ns='/var/run/netns/m3')
+dout7=DyscoAgentOut(name='dout7', ns='/var/run/netns/m4')
+dout8=DyscoAgentOut(name='dout8', ns='/var/run/netns/m4')
+dout9=DyscoAgentOut(name='dout9', ns='/var/run/netns/RA')
+dout10=DyscoAgentOut(name='dout10', ns='/var/run/netns/proxy1')
+dout11=DyscoAgentOut(name='dout11', ns='/var/run/netns/proxy1')
+dout12=DyscoAgentOut(name='dout12', ns='/var/run/netns/proxy2')
+dout13=DyscoAgentOut(name='dout13', ns='/var/run/netns/proxy2')
+
+din0=DyscoAgentIn(name='din0', ns='/var/run/netns/LA')
+din1=DyscoAgentIn(name='din1', ns='/var/run/netns/m1')
+din2=DyscoAgentIn(name='din2', ns='/var/run/netns/m1')
+din3=DyscoAgentIn(name='din3', ns='/var/run/netns/m2')
+din4=DyscoAgentIn(name='din4', ns='/var/run/netns/m2')
+din5=DyscoAgentIn(name='din5', ns='/var/run/netns/m3')
+din6=DyscoAgentIn(name='din6', ns='/var/run/netns/m3')
+din7=DyscoAgentIn(name='din7', ns='/var/run/netns/m4')
+din8=DyscoAgentIn(name='din8', ns='/var/run/netns/m4')
+din9=DyscoAgentIn(name='din9', ns='/var/run/netns/RA')	
+din10=DyscoAgentIn(name='din10', ns='/var/run/netns/proxy1')
+din11=DyscoAgentIn(name='din11', ns='/var/run/netns/proxy1')
+din12=DyscoAgentIn(name='din12', ns='/var/run/netns/proxy2')
+din13=DyscoAgentIn(name='din13', ns='/var/run/netns/proxy2')
+
+if secure == 0:
+   	dout0.setup(agentin='din0', devip='10.0.1.1', secure=False)
+	dout1.setup(agentin='din1', devip='10.0.2.1', secure=False)
+	dout2.setup(agentin='din2', devip='10.0.3.1', secure=False)
+	dout3.setup(agentin='din3', devip='10.0.4.1', secure=False)
+	dout4.setup(agentin='din4', devip='10.0.5.1', secure=False)
+	dout5.setup(agentin='din5', devip='192.168.2.1', secure=False)
+	dout6.setup(agentin='din6', devip='192.168.3.1', secure=False)
+	dout7.setup(agentin='din7', devip='192.168.12.1', secure=False)
+	dout8.setup(agentin='din8', devip='192.168.13.1', secure=False)
+	dout9.setup(agentin='din9', devip='192.168.4.1', secure=False)
+	dout10.setup(agentin='din10', devip='10.0.6.1', secure=False)
+	dout11.setup(agentin='din11', devip='10.0.7.1', secure=False)
+	dout12.setup(agentin='din12', devip='192.168.6.1', secure=False)
+	dout13.setup(agentin='din13', devip='192.168.7.1', secure=False)
+else:
+	dout0.setup(agentin='din0', devip='10.0.1.1', secure=True)
+	dout1.setup(agentin='din1', devip='10.0.2.1', secure=True)
+	dout2.setup(agentin='din2', devip='10.0.3.1', secure=True)
+	dout3.setup(agentin='din3', devip='10.0.4.1', secure=True)
+	dout4.setup(agentin='din4', devip='10.0.5.1', secure=True)
+	dout5.setup(agentin='din5', devip='192.168.2.1', secure=True)
+	dout6.setup(agentin='din6', devip='192.168.3.1', secure=True)
+	dout7.setup(agentin='din7', devip='192.168.12.1', secure=True)
+	dout8.setup(agentin='din8', devip='192.168.13.1', secure=True)
+	dout9.setup(agentin='din9', devip='192.168.4.1', secure=True)
+	dout10.setup(agentin='din10', devip='10.0.6.1', secure=True)
+	dout11.setup(agentin='din11', devip='10.0.7.1', secure=True)
+	dout12.setup(agentin='din12', devip='192.168.6.1', secure=True)
+	dout13.setup(agentin='din13', devip='192.168.7.1', secure=True)
+
+pi1 -> ipfwd1
+dout0:1 -> ipfwd1
+pi0 -> dout0 -> ipfwd1
+dout1:1 -> ipfwd1
+pi3 -> dout1 -> ipfwd1
+dout2:1 -> ipfwd1
+pi4 -> dout2 -> ipfwd1
+dout3:1 -> ipfwd1
+pi5 -> dout3 -> ipfwd1
+dout4:1 -> ipfwd1
+pi6 -> dout4 -> ipfwd1
+dout10:1 -> ipfwd1
+pi12 -> dout10 -> ipfwd1
+dout11:1 -> ipfwd1
+pi13 -> dout11 -> ipfwd1
+
+ipfwd1:0 -> po1
+ipfwd1:1 -> din0 -> po0
+ipfwd1:2 -> din1 -> po3
+ipfwd1:3 -> din2 -> po4
+ipfwd1:4 -> din3 -> po5
+ipfwd1:5 -> din4 -> po6
+ipfwd1:6 -> po1
+ipfwd1:7 -> din10 -> po12
+ipfwd1:8 -> din11 -> po13
+
+pi2 -> ipfwd2
+dout5:1 -> ipfwd2
+pi7 -> dout5 -> ipfwd2
+dout6:1 -> ipfwd2
+pi8 -> dout6 -> ipfwd2
+dout7:1 -> ipfwd2
+pi9 -> dout7 -> ipfwd2
+dout8:1 -> ipfwd2
+pi10 -> dout8 -> ipfwd2
+dout9:1 -> ipfwd2
+pi11 -> dout9 -> ipfwd2
+dout12:1 -> ipfwd2
+pi14 -> dout12 -> ipfwd2
+dout13:1 -> ipfwd2
+pi15 -> dout13 -> ipfwd2
+
+ipfwd2:0 -> po2
+ipfwd2:1 -> din9 -> po11
+ipfwd2:2 -> din5 -> po7
+ipfwd2:3 -> din6 -> po8
+ipfwd2:4 -> din7 -> po9
+ipfwd2:5 -> din8 -> po10
+ipfwd2:6 -> po2
+ipfwd2:7 -> din12 -> po14
+ipfwd2:8 -> din13 -> po15
+
+os.system('pkill -9 srv')
+os.system('pkill -9 cli')
+os.system('pkill -9 iperf')
+os.system('pkill -9 tcp_proxy')
+
+os.system('ip netns exec RA iperf -s &>/dev/null &')
+#os.system('ip netns exec RA /root/srv 5001 1000000 &')
+
+if case == 0:
+   	dyscocenter.add(priority=1, sc_len=1, ns='/var/run/netns/LA', chain=['192.168.4.1'], filter='dst port 5001')
+	os.system('ip netns exec LA iperf -c 192.168.4.1 -p 5001 -b 10m -t 100 &')
+	#os.system('ip netns exec LA /root/cli 192.168.4.1 5001 &')
+elif case == 1:
+        dyscocenter.add(priority=1, sc_len=1, ns='/var/run/netns/LA', chain=['10.0.6.1'], filter='dst port 5001')
+	dyscocenter.add(priority=2, sc_len=1, ns='/var/run/netns/proxy1', chain=['192.168.4.1'], filter='dst port 5001')
+	os.system('ip netns exec proxy1 /root/tcp_proxy 5001 192.168.4.1 5001 5 1 2 &')
+	os.system('sleep 5')
+	#os.system('ip netns exec LA /root/cli 10.0.6.1 5001 &')
+	os.system('ip netns exec LA iperf -c 10.0.6.1 -p 5001 -t 200 -b 10m &')
+elif case == 2:
+        dyscocenter.add(priority=1, sc_len=1, ns='/var/run/netns/LA', chain=['192.168.6.1'], filter='dst port 5001')
+	dyscocenter.add(priority=2, sc_len=1, ns='/var/run/netns/proxy2', chain=['192.168.4.1'], filter='dst port 5001')
+	os.system('ip netns exec proxy2 /root/tcp_proxy 5001 192.168.4.1 5001 5 1 2 &')
+	os.system('sleep 5')
+	os.system('ip netns exec LA /root/cli 192.168.6.1 5001 &')
+elif case == 3:
+   	dyscocenter.add(priority=1, sc_len=1, ns='/var/run/netns/LA', chain=['192.168.4.1'], filter='dst port 5001')
+	os.system('sleep 5')
+	os.system('ip netns exec LA /root/run_client.sh 192.168.4.1 5001 200 1 1 0 1 5 10.0.2.1 &')
+elif case == 4:
+        dyscocenter.add(priority=1, sc_len=2, ns='/var/run/netns/LA', chain=['10.0.2.1', '192.168.4.1'], filter='dst port 5001')
+	os.system('sleep 5')
+	os.system('ip netns exec LA /root/run_client.sh 192.168.4.1 5001 200 1 1 0 2 5 &')
+elif case == 5:
+   	dyscocenter.add(priority=1, sc_len=1, ns='/var/run/netns/LA', chain=['192.168.4.1'], filter='dst port 5001')
+	os.system('sleep 5')
+	os.system('ip netns exec LA /root/run_client.sh 192.168.4.1 5001 200 1 1 0 1 5 192.168.2.1 &')
+elif case == 6:
+        dyscocenter.add(priority=1, sc_len=2, ns='/var/run/netns/LA', chain=['192.168.2.1', '192.168.4.1'], filter='dst port 5001')
+	os.system('sleep 5')
+	os.system('ip netns exec LA /root/run_client.sh 192.168.4.1 5001 200 1 1 0 2 5 &')
+elif case == 7:
+   	dyscocenter.add(priority=1, sc_len=1, ns='/var/run/netns/LA', chain=['192.168.4.1'], filter='dst port 5001')
+	os.system('sleep 5')
+	os.system('ip netns exec LA /root/run_client.sh 192.168.4.1 5001 200 1 1 0 1 5 10.0.2.1 192.168.2.1 &')

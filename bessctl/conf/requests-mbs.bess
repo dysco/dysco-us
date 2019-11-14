@@ -1,0 +1,182 @@
+import os
+
+dysco = int($DYSCO!'0')
+secure = int($SECURE!'0')
+
+assert(0 <= dysco <= 1)
+assert(0 <= secure <= 1)
+
+os.system('sudo ifconfig enp134s0f0 down 1>/dev/null 2>/dev/null')
+os.system('sudo ifconfig enp134s0f1 down 1>/dev/null 2>/dev/null')
+os.system('sudo mkdir -p /tmp/bessd 1>/dev/null 2>/dev/null')
+os.system('sudo rm -f /tmp/bessd/vhost_*.sock 1>/dev/null 2>/dev/null')
+os.system("sudo ps -axf | grep qemu | awk -F ' ' '{print $1}' | xargs kill -9 2>/dev/null")
+
+bess.add_worker(wid=1,core=11)
+
+vdev_str0 = 'eth_vhost0,iface=/tmp/bessd/vhost_mb0_0.sock,queues=1'
+vdev_str1 = 'eth_vhost1,iface=/tmp/bessd/vhost_mb1_0.sock,queues=1'
+vdev_str2 = 'eth_vhost2,iface=/tmp/bessd/vhost_mb2_0.sock,queues=1'
+vdev_str3 = 'eth_vhost3,iface=/tmp/bessd/vhost_mb3_0.sock,queues=1'
+vdev_str4 = 'eth_vhost4,iface=/tmp/bessd/vhost_mb0_1.sock,queues=1'
+vdev_str5 = 'eth_vhost5,iface=/tmp/bessd/vhost_mb1_1.sock,queues=1'
+vdev_str6 = 'eth_vhost6,iface=/tmp/bessd/vhost_mb2_1.sock,queues=1'
+vdev_str7 = 'eth_vhost7,iface=/tmp/bessd/vhost_mb3_1.sock,queues=1'
+
+PMDPort(name='port_mlx0', port_id=0, num_inc_q=1, num_out_q=1)
+PMDPort(name='port_mlx1', port_id=1, num_inc_q=1, num_out_q=1)
+PMDPort(name='port_mb0_0', vdev=vdev_str0, num_inc_q=1, num_out_q=1)
+PMDPort(name='port_mb1_0', vdev=vdev_str1, num_inc_q=1, num_out_q=1)
+PMDPort(name='port_mb2_0', vdev=vdev_str2, num_inc_q=1, num_out_q=1)
+PMDPort(name='port_mb3_0', vdev=vdev_str3, num_inc_q=1, num_out_q=1)
+PMDPort(name='port_mb0_1', vdev=vdev_str4, num_inc_q=1, num_out_q=1)
+PMDPort(name='port_mb1_1', vdev=vdev_str5, num_inc_q=1, num_out_q=1)
+PMDPort(name='port_mb2_1', vdev=vdev_str6, num_inc_q=1, num_out_q=1)
+PMDPort(name='port_mb3_1', vdev=vdev_str7, num_inc_q=1, num_out_q=1)
+
+ipfwd::IPLookup()
+ipfwd.add(prefix='192.168.1.1', prefix_len=32, gate=0)
+ipfwd.add(prefix='192.168.4.1', prefix_len=32, gate=1)
+ipfwd.add(prefix='192.168.5.1', prefix_len=32, gate=2)
+ipfwd.add(prefix='192.168.6.1', prefix_len=32, gate=3)
+ipfwd.add(prefix='192.168.7.1', prefix_len=32, gate=4)
+ipfwd.add(prefix='192.168.8.1', prefix_len=32, gate=5)
+ipfwd.add(prefix='192.168.15.1', prefix_len=32, gate=6)
+ipfwd.add(prefix='192.168.16.1', prefix_len=32, gate=7)
+ipfwd.add(prefix='192.168.17.1', prefix_len=32, gate=8)
+ipfwd.add(prefix='192.168.18.1', prefix_len=32, gate=9)
+ipfwd.add(prefix='0.0.0.0', prefix_len=0, gate=10)
+
+fib::L2Forward()
+fib.add(entries=[
+	{'addr': '52:54:00:12:34:4C', 'gate': 0},
+	{'addr': '52:54:00:12:34:4F', 'gate': 1},
+	{'addr': '52:54:00:12:34:00', 'gate': 2},
+	{'addr': '52:54:00:12:34:10', 'gate': 3},
+	{'addr': '52:54:00:12:34:20', 'gate': 4},
+	{'addr': '52:54:00:12:34:30', 'gate': 5},
+	{'addr': '52:54:00:12:34:01', 'gate': 6},
+	{'addr': '52:54:00:12:34:11', 'gate': 7},
+	{'addr': '52:54:00:12:34:21', 'gate': 8},
+	{'addr': '52:54:00:12:34:31', 'gate': 9}
+	])
+
+pi0=PortInc(name='port_inc0', port='port_mlx0')
+pi1=PortInc(name='port_inc1', port='port_mlx1')
+pi2=PortInc(name='port_inc2', port='port_mb0_0')
+pi3=PortInc(name='port_inc3', port='port_mb1_0')
+pi4=PortInc(name='port_inc4', port='port_mb2_0')
+pi5=PortInc(name='port_inc5', port='port_mb3_0')
+pi6=PortInc(name='port_inc6', port='port_mb0_1')
+pi7=PortInc(name='port_inc7', port='port_mb1_1')
+pi8=PortInc(name='port_inc8', port='port_mb2_1')
+pi9=PortInc(name='port_inc9', port='port_mb3_1')
+po0=PortOut(name='port_out0', port='port_mlx0')
+po1=PortOut(name='port_out1', port='port_mlx1')
+po2=PortOut(name='port_out2', port='port_mb0_0')
+po3=PortOut(name='port_out3', port='port_mb1_0')
+po4=PortOut(name='port_out4', port='port_mb2_0')
+po5=PortOut(name='port_out5', port='port_mb3_0')
+po6=PortOut(name='port_out6', port='port_mb0_1')
+po7=PortOut(name='port_out7', port='port_mb1_1')
+po8=PortOut(name='port_out8', port='port_mb2_1')
+po9=PortOut(name='port_out9', port='port_mb3_1')
+
+if dysco == 1:
+	dyscocenter::DyscoCenter()
+
+	dout0=DyscoAgentOut(name='dout0', ns='mb0')
+	dout1=DyscoAgentOut(name='dout1', ns='mb1')
+	dout2=DyscoAgentOut(name='dout2', ns='mb2')
+	dout3=DyscoAgentOut(name='dout3', ns='mb3')
+	dout4=DyscoAgentOut(name='dout4', ns='mb0')
+	dout5=DyscoAgentOut(name='dout5', ns='mb1')
+	dout6=DyscoAgentOut(name='dout6', ns='mb2')
+	dout7=DyscoAgentOut(name='dout7', ns='mb3')
+	din0=DyscoAgentIn(name='din0', wid=1, ns='mb0')	
+	din1=DyscoAgentIn(name='din1', wid=1, ns='mb1')	
+	din2=DyscoAgentIn(name='din2', wid=1, ns='mb2')	
+	din3=DyscoAgentIn(name='din3', wid=1, ns='mb3')	
+	din4=DyscoAgentIn(name='din4', wid=1, ns='mb0')	
+	din5=DyscoAgentIn(name='din5', wid=1, ns='mb1')	
+	din6=DyscoAgentIn(name='din6', wid=1, ns='mb2')	
+	din7=DyscoAgentIn(name='din7', wid=1, ns='mb3')
+	if secure == 0:
+	        dout0.setup(agentin='din0', devip='192.168.5.1', secure=False, wid=1)
+		dout1.setup(agentin='din1', devip='192.168.6.1', secure=False, wid=1)
+		dout2.setup(agentin='din2', devip='192.168.7.1', secure=False, wid=1)
+		dout3.setup(agentin='din3', devip='192.168.8.1', secure=False, wid=1)
+		dout4.setup(agentin='din4', devip='192.168.15.1', secure=False, wid=1)
+		dout5.setup(agentin='din5', devip='192.168.16.1', secure=False, wid=1)
+		dout6.setup(agentin='din6', devip='192.168.17.1', secure=False, wid=1)
+		dout7.setup(agentin='din7', devip='192.168.18.1', secure=False, wid=1)
+	else:
+	        dout0.setup(agentin='din0', devip='192.168.5.1', secure=True, wid=1)
+		dout1.setup(agentin='din1', devip='192.168.6.1', secure=True, wid=1)
+		dout2.setup(agentin='din2', devip='192.168.7.1', secure=True, wid=1)
+		dout3.setup(agentin='din3', devip='192.168.8.1', secure=True, wid=1)
+		dout4.setup(agentin='din4', devip='192.168.15.1', secure=True, wid=1)
+		dout5.setup(agentin='din5', devip='192.168.16.1', secure=True, wid=1)
+		dout6.setup(agentin='din6', devip='192.168.17.1', secure=True, wid=1)
+		dout7.setup(agentin='din7', devip='192.168.18.1', secure=True, wid=1)
+		
+	dout0:1 -> ipfwd
+	dout1:1 -> ipfwd
+	dout2:1 -> ipfwd
+	dout3:1 -> ipfwd
+	dout4:1 -> ipfwd
+	dout5:1 -> ipfwd
+	dout6:1 -> ipfwd
+	dout7:1 -> ipfwd
+	pi0 -> ipfwd
+	pi1 -> ipfwd
+	pi2 -> dout0 -> ipfwd
+	pi3 -> dout1 -> ipfwd
+	pi4 -> dout2 -> ipfwd
+	pi5 -> dout3 -> ipfwd
+	pi6 -> dout4 -> ipfwd
+	pi7 -> dout5 -> ipfwd
+	pi8 -> dout6 -> ipfwd
+	pi9 -> dout7 -> ipfwd
+
+	ipfwd:0 -> po0	
+	ipfwd:1 -> po1	
+	ipfwd:2 -> din0 -> po2	
+	ipfwd:3 -> din1 -> po3
+	ipfwd:4 -> din2 -> po4	
+	ipfwd:5 -> din3 -> po5
+	ipfwd:6 -> din4 -> po6	
+	ipfwd:7 -> din5 -> po7
+	ipfwd:8 -> din6 -> po8	
+	ipfwd:9 -> din7 -> po9
+	ipfwd:10 -> po1
+	
+else:
+	pi0 -> fib
+	pi1 -> fib
+	pi2 -> fib
+	pi3 -> fib
+	pi4 -> fib
+	pi5 -> fib
+	pi6 -> fib
+	pi7 -> fib
+	pi8 -> fib
+	pi9 -> fib
+
+	fib:0 -> po0
+	fib:1 -> po1
+	fib:2 -> po2
+	fib:3 -> po3
+	fib:4 -> po4
+	fib:5 -> po5
+	fib:6 -> po6
+	fib:7 -> po7
+	fib:8 -> po8
+	fib:9 -> po9
+
+os.system('sleep 2')
+os.system('sudo bash /u/ronaldof/qemu-mb0/script-latency.sh')
+os.system('sudo bash /u/ronaldof/qemu-mb1/script-latency.sh')
+os.system('sudo bash /u/ronaldof/qemu-mb2/script-latency.sh')
+os.system('sudo bash /u/ronaldof/qemu-mb3/script-latency.sh')
+os.system('sleep 2')

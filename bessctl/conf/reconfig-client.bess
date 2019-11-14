@@ -1,0 +1,72 @@
+import os
+
+dysco = int($DYSCO!'0')
+secure = int($SECURE!'0')
+
+assert(0 <= dysco <= 1)
+assert(0 <= secure <= 1)
+
+os.system('sudo ifconfig enp134s0f0 down 1>/dev/null 2>/dev/null')
+os.system('sudo ifconfig enp134s0f1 down 1>/dev/null 2>/dev/null')
+os.system('sudo mkdir -p /tmp/bessd 1>/dev/null 2>/dev/null')
+os.system('sudo rm -f /tmp/bessd/vhost_*.sock 1>/dev/null 2>/dev/null')
+os.system("sudo ps -axf | grep qemu | awk -F ' ' '{print $1}' | xargs kill -9 2>/dev/null")
+
+bess.add_worker(wid=1,core=10)
+bess.add_worker(wid=2,core=11)
+bess.add_worker(wid=3,core=12)
+bess.add_worker(wid=4,core=13)
+
+vdev_str0 = 'eth_vhost0,iface=/tmp/bessd/vhost_client0.sock,queues=1'
+vdev_str1 = 'eth_vhost1,iface=/tmp/bessd/vhost_nat0.sock,queues=1'
+vdev_str2 = 'eth_vhost2,iface=/tmp/bessd/vhost_nat1.sock,queues=1'
+
+PMDPort(name='port_mlx0', port_id=0, num_inc_q=1, num_out_q=1)
+PMDPort(name='port_nat0', vdev=vdev_str1, num_inc_q=1, num_out_q=1)
+PMDPort(name='port_nat1', vdev=vdev_str2, num_inc_q=1, num_out_q=1)
+PMDPort(name='port_client0', vdev=vdev_str0, num_inc_q=1, num_out_q=1)
+
+pi0=PortInc(name='port_inc0', port='port_mlx0', prefetch=True)
+pi1=PortInc(name='port_inc1', port='port_nat0', prefetch=True)
+pi2=PortInc(name='port_inc2', port='port_nat1', prefetch=True)
+pi3=PortInc(name='port_inc3', port='port_client0', prefetch=True)
+po0=PortOut(name='port_out0', port='port_mlx0')
+po1=PortOut(name='port_out1', port='port_nat0')
+po2=PortOut(name='port_out2', port='port_nat1')
+po3=PortOut(name='port_out3', port='port_client0')
+
+bess.attach_task(module_name=pi0.name, wid=1)
+bess.attach_task(module_name=pi1.name, wid=2)
+bess.attach_task(module_name=pi2.name, wid=3)
+bess.attach_task(module_name=pi3.name, wid=4)
+
+if dysco == 1:
+	dyscocenter::DyscoCenter()
+	dyscocenter.add(priority=1, sc_len=2, ns='client0', chain=['192.168.2.1', '192.168.4.1'], filter='dst port 5001')
+	
+	dout0=DyscoAgentOut(name='dout0', ns='client0')
+	din0=DyscoAgentIn(name='din0', wid=4, ns='client0')	
+	if secure == 0:
+	   	dout0.setup(agentin='din0', devip='192.168.11.1', secure=False, wid=4)
+	else:
+	   	dout0.setup(agentin='din0', devip='192.168.11.1', secure=True, wid=4)
+
+	bess.attach_task(module_name=dout0.name, wid=4)
+
+	pi0 -> po1
+	pi2 -> din0 -> po3
+
+	dout0:1 -> po2
+	pi3 -> dout0 -> po2
+	pi1 -> po0
+	
+else:
+	pi0 -> po1
+	pi2 -> po3
+	pi3 -> po2
+	pi1 -> po0
+
+os.system('sleep 2')
+os.system('sudo bash /u/ronaldof/qemu-client0/script-1.sh')
+os.system('sudo bash /u/ronaldof/qemu-nat0/script-1.sh')
+os.system('sleep 2')

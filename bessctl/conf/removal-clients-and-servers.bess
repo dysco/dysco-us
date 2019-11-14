@@ -1,0 +1,198 @@
+import os
+
+dysco = int($DYSCO!'0')
+secure = int($SECURE!'0')
+
+assert(0 <= dysco <= 1)
+assert(0 <= secure <= 1)
+
+os.system('sudo ifconfig enp134s0f0 down 1>/dev/null 2>/dev/null')
+os.system('sudo ifconfig enp134s0f1 down 1>/dev/null 2>/dev/null')
+os.system('sudo mkdir -p /tmp/bessd 1>/dev/null 2>/dev/null')
+os.system('sudo rm -f /tmp/bessd/vhost_*.sock 1>/dev/null 2>/dev/null')
+os.system("sudo ps -axf | grep qemu | awk -F ' ' '{print $1}' | xargs kill -9 2>/dev/null")
+
+bess.add_worker(wid=1,core=11)
+bess.add_worker(wid=2,core=19)
+
+vdev_str0 = 'eth_vhost0,iface=/tmp/bessd/vhost_client0.sock,queues=1'
+vdev_str1 = 'eth_vhost1,iface=/tmp/bessd/vhost_client1.sock,queues=1'
+vdev_str2 = 'eth_vhost2,iface=/tmp/bessd/vhost_client2.sock,queues=1'
+vdev_str3 = 'eth_vhost3,iface=/tmp/bessd/vhost_client3.sock,queues=1'
+vdev_str4 = 'eth_vhost4,iface=/tmp/bessd/vhost_server0.sock,queues=1'
+vdev_str5 = 'eth_vhost5,iface=/tmp/bessd/vhost_server1.sock,queues=1'
+vdev_str6 = 'eth_vhost6,iface=/tmp/bessd/vhost_server2.sock,queues=1'
+vdev_str7 = 'eth_vhost7,iface=/tmp/bessd/vhost_server3.sock,queues=1'
+
+PMDPort(name='port_mlx0', port_id=0, num_inc_q=1, num_out_q=1)
+PMDPort(name='port_mlx1', port_id=1, num_inc_q=1, num_out_q=1)
+PMDPort(name='port_client0', vdev=vdev_str0, num_inc_q=1, num_out_q=1)
+PMDPort(name='port_client1', vdev=vdev_str1, num_inc_q=1, num_out_q=1)
+PMDPort(name='port_client2', vdev=vdev_str2, num_inc_q=1, num_out_q=1)
+PMDPort(name='port_client3', vdev=vdev_str3, num_inc_q=1, num_out_q=1)
+PMDPort(name='port_server0', vdev=vdev_str4, num_inc_q=1, num_out_q=1)
+PMDPort(name='port_server1', vdev=vdev_str5, num_inc_q=1, num_out_q=1)
+PMDPort(name='port_server2', vdev=vdev_str6, num_inc_q=1, num_out_q=1)
+PMDPort(name='port_server3', vdev=vdev_str7, num_inc_q=1, num_out_q=1)
+
+ipfwd0::IPLookup()
+ipfwd0.add(prefix='192.168.1.1', prefix_len=32, gate=0)
+ipfwd0.add(prefix='192.168.1.2', prefix_len=32, gate=1)
+ipfwd0.add(prefix='192.168.1.3', prefix_len=32, gate=2)
+ipfwd0.add(prefix='192.168.1.4', prefix_len=32, gate=3)
+ipfwd0.add(prefix='0.0.0.0', prefix_len=0, gate=4)
+
+ipfwd1::IPLookup()
+ipfwd1.add(prefix='192.168.4.1', prefix_len=32, gate=0)
+ipfwd1.add(prefix='192.168.4.2', prefix_len=32, gate=1)
+ipfwd1.add(prefix='192.168.4.3', prefix_len=32, gate=2)
+ipfwd1.add(prefix='192.168.4.4', prefix_len=32, gate=3)
+ipfwd1.add(prefix='0.0.0.0', prefix_len=0, gate=4)
+
+pi0=PortInc(name='port_inc0', port='port_mlx0')
+pi1=PortInc(name='port_inc1', port='port_mlx1')
+pi2=PortInc(name='port_inc2', port='port_client0')
+pi3=PortInc(name='port_inc3', port='port_client1')
+pi4=PortInc(name='port_inc4', port='port_client2')
+pi5=PortInc(name='port_inc5', port='port_client3')
+pi6=PortInc(name='port_inc6', port='port_server0')
+pi7=PortInc(name='port_inc7', port='port_server1')
+pi8=PortInc(name='port_inc8', port='port_server2')
+pi9=PortInc(name='port_inc9', port='port_server3')
+po0=PortOut(name='port_out0', port='port_mlx0')
+po1=PortOut(name='port_out1', port='port_mlx1')
+po2=PortOut(name='port_out2', port='port_client0')
+po3=PortOut(name='port_out3', port='port_client1')
+po4=PortOut(name='port_out4', port='port_client2')
+po5=PortOut(name='port_out5', port='port_client3')
+po6=PortOut(name='port_out6', port='port_server0')
+po7=PortOut(name='port_out7', port='port_server1')
+po8=PortOut(name='port_out8', port='port_server2')
+po9=PortOut(name='port_out9', port='port_server3')
+
+bess.attach_task(module_name=pi0.name, wid=1)
+bess.attach_task(module_name=pi2.name, wid=1)
+bess.attach_task(module_name=pi3.name, wid=1)
+bess.attach_task(module_name=pi4.name, wid=1)
+bess.attach_task(module_name=pi5.name, wid=1)
+
+bess.attach_task(module_name=pi1.name, wid=2)
+bess.attach_task(module_name=pi6.name, wid=2)
+bess.attach_task(module_name=pi7.name, wid=2)
+bess.attach_task(module_name=pi8.name, wid=2)
+bess.attach_task(module_name=pi9.name, wid=2)
+
+if dysco == 1:
+	dyscocenter::DyscoCenter()
+	dyscocenter.add(priority=1, sc_len=1, ns='client0', chain=['192.168.2.1'], filter='dst port 5001')
+	dyscocenter.add(priority=2, sc_len=1, ns='client1', chain=['192.168.2.1'], filter='dst port 5002')
+	dyscocenter.add(priority=3, sc_len=1, ns='client2', chain=['192.168.2.1'], filter='dst port 5003')
+	dyscocenter.add(priority=4, sc_len=1, ns='client3', chain=['192.168.2.1'], filter='dst port 5004')
+
+	dout0=DyscoAgentOut(name='dout0', ns='client0')
+	dout1=DyscoAgentOut(name='dout1', ns='client1')
+	dout2=DyscoAgentOut(name='dout2', ns='client2')
+	dout3=DyscoAgentOut(name='dout3', ns='client3')
+	dout4=DyscoAgentOut(name='dout4', ns='server0')
+	dout5=DyscoAgentOut(name='dout5', ns='server1')
+	dout6=DyscoAgentOut(name='dout6', ns='server2')
+	dout7=DyscoAgentOut(name='dout7', ns='server3')
+	din0=DyscoAgentIn(name='din0', wid=1, ns='client0')	
+	din1=DyscoAgentIn(name='din1', wid=1, ns='client1')	
+	din2=DyscoAgentIn(name='din2', wid=1, ns='client2')	
+	din3=DyscoAgentIn(name='din3', wid=1, ns='client3')
+	din4=DyscoAgentIn(name='din4', wid=2, ns='server0')
+	din5=DyscoAgentIn(name='din5', wid=2, ns='server1')
+	din6=DyscoAgentIn(name='din6', wid=2, ns='server2')
+	din7=DyscoAgentIn(name='din7', wid=2, ns='server3')
+	if secure == 0:
+		dout0.setup(agentin='din0', devip='192.168.1.1', secure=False, wid=1)
+		dout1.setup(agentin='din1', devip='192.168.1.2', secure=False, wid=1)
+		dout2.setup(agentin='din2', devip='192.168.1.3', secure=False, wid=1)
+		dout3.setup(agentin='din3', devip='192.168.1.4', secure=False, wid=1)
+		dout4.setup(agentin='din4', devip='192.168.4.1', secure=False, wid=2)
+		dout5.setup(agentin='din5', devip='192.168.4.2', secure=False, wid=2)
+		dout6.setup(agentin='din6', devip='192.168.4.3', secure=False, wid=2)
+		dout7.setup(agentin='din7', devip='192.168.4.4', secure=False, wid=2)
+	else:
+		dout0.setup(agentin='din0', devip='192.168.1.1', secure=True, wid=1)
+		dout1.setup(agentin='din1', devip='192.168.1.2', secure=True, wid=1)
+		dout2.setup(agentin='din2', devip='192.168.1.3', secure=True, wid=1)
+		dout3.setup(agentin='din3', devip='192.168.1.4', secure=True, wid=1)
+		dout4.setup(agentin='din4', devip='192.168.4.1', secure=True, wid=2)
+		dout5.setup(agentin='din5', devip='192.168.4.2', secure=True, wid=2)
+		dout6.setup(agentin='din6', devip='192.168.4.3', secure=True, wid=2)
+		dout7.setup(agentin='din7', devip='192.168.4.4', secure=True, wid=2)
+
+	bess.attach_task(module_name=dout0.name, wid=1)
+	bess.attach_task(module_name=dout1.name, wid=1)
+	bess.attach_task(module_name=dout2.name, wid=1)
+	bess.attach_task(module_name=dout3.name, wid=1)
+	bess.attach_task(module_name=dout4.name, wid=2)
+	bess.attach_task(module_name=dout5.name, wid=2)
+	bess.attach_task(module_name=dout6.name, wid=2)
+	bess.attach_task(module_name=dout7.name, wid=2)
+
+	dout0:1 -> ipfwd0
+	dout1:1 -> ipfwd0
+	dout2:1 -> ipfwd0
+	dout3:1 -> ipfwd0
+	pi0 -> ipfwd0
+	pi2 -> dout0 -> ipfwd0
+	pi3 -> dout1 -> ipfwd0
+	pi4 -> dout2 -> ipfwd0
+	pi5 -> dout3 -> ipfwd0
+	ipfwd0:0 -> din0 -> po2	
+	ipfwd0:1 -> din1 -> po3	
+	ipfwd0:2 -> din2 -> po4	
+	ipfwd0:3 -> din3 -> po5
+	ipfwd0:4 -> po0
+
+	dout4:1 -> ipfwd1
+	dout5:1 -> ipfwd1
+	dout6:1 -> ipfwd1
+	dout7:1 -> ipfwd1
+	pi1 -> ipfwd1
+	pi6 -> dout4 -> ipfwd1
+	pi7 -> dout5 -> ipfwd1
+	pi8 -> dout6 -> ipfwd1
+	pi9 -> dout7 -> ipfwd1
+	ipfwd1:0 -> din4 -> po6	
+	ipfwd1:1 -> din5 -> po7	
+	ipfwd1:2 -> din6 -> po8	
+	ipfwd1:3 -> din7 -> po9
+	ipfwd1:4 -> po1
+
+else:
+	pi0 -> ipfwd0
+	pi2 -> ipfwd0
+	pi3 -> ipfwd0
+	pi4 -> ipfwd0
+	pi5 -> ipfwd0
+	ipfwd0:0 -> po2
+	ipfwd0:1 -> po3
+	ipfwd0:2 -> po4
+	ipfwd0:3 -> po5
+	ipfwd0:4 -> po0
+
+	pi1 -> ipfwd1
+	pi6 -> ipfwd1
+	pi7 -> ipfwd1
+	pi8 -> ipfwd1
+	pi9 -> ipfwd1
+	ipfwd1:0 -> po6
+	ipfwd1:1 -> po7
+	ipfwd1:2 -> po8
+	ipfwd1:3 -> po9
+	ipfwd1:4 -> po1
+
+os.system('sleep 2')
+os.system('sudo bash /u/ronaldof/qemu-client0/script-1.sh')
+os.system('sudo bash /u/ronaldof/qemu-client1/script-1.sh')
+os.system('sudo bash /u/ronaldof/qemu-client2/script-1.sh')
+os.system('sudo bash /u/ronaldof/qemu-client3/script-1.sh')
+os.system('sudo bash /u/ronaldof/qemu-server0/script-1.sh')
+os.system('sudo bash /u/ronaldof/qemu-server1/script-1.sh')
+os.system('sudo bash /u/ronaldof/qemu-server2/script-1.sh')
+os.system('sudo bash /u/ronaldof/qemu-server3/script-1.sh')
+os.system('sleep 2')

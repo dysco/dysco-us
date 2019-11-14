@@ -1,0 +1,122 @@
+import os
+
+dysco = int($DYSCO!'0')
+secure = int($SECURE!'0')
+
+assert(0 <= dysco <= 1)
+assert(0 <= secure <= 1)
+
+os.system('sudo ifconfig enp134s0f0 down 1>/dev/null 2>/dev/null')
+os.system('sudo ifconfig enp134s0f1 down 1>/dev/null 2>/dev/null')
+os.system('sudo mkdir -p /tmp/bessd 1>/dev/null 2>/dev/null')
+os.system('sudo rm -f /tmp/bessd/vhost_*.sock 1>/dev/null 2>/dev/null')
+os.system("sudo ps -axf | grep qemu | awk -F ' ' '{print $1}' | xargs kill -9 2>/dev/null")
+
+bess.add_worker(wid=1,core=11)
+bess.add_worker(wid=2,core=12)
+
+vdev_str0 = 'eth_vhost0,iface=/tmp/bessd/vhost_proxy0_0.sock,queues=1'
+vdev_str1 = 'eth_vhost1,iface=/tmp/bessd/vhost_proxy0_1.sock,queues=1'
+vdev_str2 = 'eth_vhost2,iface=/tmp/bessd/vhost_proxy1_0.sock,queues=1'
+vdev_str3 = 'eth_vhost3,iface=/tmp/bessd/vhost_proxy1_1.sock,queues=1'
+
+PMDPort(name='port_mlx0', port_id=0, num_inc_q=1, num_out_q=1)
+PMDPort(name='port_mlx1', port_id=1, num_inc_q=1, num_out_q=1)
+PMDPort(name='port_proxy0_0', vdev=vdev_str0, num_inc_q=1, num_out_q=1)
+PMDPort(name='port_proxy0_1', vdev=vdev_str1, num_inc_q=1, num_out_q=1)
+PMDPort(name='port_proxy1_0', vdev=vdev_str2, num_inc_q=1, num_out_q=1)
+PMDPort(name='port_proxy1_1', vdev=vdev_str3, num_inc_q=1, num_out_q=1)
+
+ipfwd0::IPLookup()
+ipfwd0.add(prefix='192.168.2.1', prefix_len=32, gate=0)
+ipfwd0.add(prefix='192.168.2.2', prefix_len=32, gate=1)
+
+ipfwd1::IPLookup()
+ipfwd1.add(prefix='192.168.3.1', prefix_len=32, gate=0)
+ipfwd1.add(prefix='192.168.3.2', prefix_len=32, gate=1)
+
+pi0=PortInc(name='port_inc0', port='port_mlx0')
+pi1=PortInc(name='port_inc1', port='port_mlx1')
+pi2=PortInc(name='port_inc2', port='port_proxy0_0')
+pi3=PortInc(name='port_inc3', port='port_proxy1_0')
+pi4=PortInc(name='port_inc4', port='port_proxy0_1')
+pi5=PortInc(name='port_inc5', port='port_proxy1_1')
+po0=PortOut(name='port_out0', port='port_mlx0')
+po1=PortOut(name='port_out1', port='port_mlx1')
+po2=PortOut(name='port_out2', port='port_proxy0_0')
+po3=PortOut(name='port_out3', port='port_proxy1_0')
+po4=PortOut(name='port_out4', port='port_proxy0_1')
+po5=PortOut(name='port_out5', port='port_proxy1_1')
+
+bess.attach_task(module_name=pi0.name, wid=1)
+bess.attach_task(module_name=pi2.name, wid=1)
+bess.attach_task(module_name=pi3.name, wid=1)
+
+bess.attach_task(module_name=pi1.name, wid=2)
+bess.attach_task(module_name=pi4.name, wid=2)
+bess.attach_task(module_name=pi5.name, wid=2)
+
+if dysco == 1:
+        dyscocenter::DyscoCenter()
+	dyscocenter.add(priority=1, sc_len=1, ns='proxy0', chain=['192.168.4.1'], filter='ip dst 192.168.4.1 and dst port 5001')
+	dyscocenter.add(priority=2, sc_len=1, ns='proxy0', chain=['192.168.4.2'], filter='ip dst 192.168.4.2 and dst port 5002')
+	dyscocenter.add(priority=3, sc_len=1, ns='proxy1', chain=['192.168.4.3'], filter='ip dst 192.168.4.3 and dst port 5003')
+	dyscocenter.add(priority=4, sc_len=1, ns='proxy1', chain=['192.168.4.4'], filter='ip dst 192.168.4.4 and dst port 5004')
+
+        dout0=DyscoAgentOut(name='dout0', ns='proxy0')
+        dout1=DyscoAgentOut(name='dout1', ns='proxy0')
+        dout2=DyscoAgentOut(name='dout2', ns='proxy1')
+        dout3=DyscoAgentOut(name='dout3', ns='proxy1')
+        din0=DyscoAgentIn(name='din0', ns='proxy0')
+        din1=DyscoAgentIn(name='din1', ns='proxy0')
+        din2=DyscoAgentIn(name='din2', ns='proxy1')
+        din3=DyscoAgentIn(name='din3', ns='proxy1')
+	if secure == 0:
+	        dout0.setup(agentin='din0', devip='192.168.2.1', secure=False)
+	        dout1.setup(agentin='din1', devip='192.168.3.1', secure=False)
+	        dout2.setup(agentin='din2', devip='192.168.2.2', secure=False)
+	        dout3.setup(agentin='din3', devip='192.168.3.2', secure=False)
+	else:
+		dout0.setup(agentin='din0', devip='192.168.2.1', secure=True)
+	       	dout1.setup(agentin='din1', devip='192.168.3.1', secure=True)
+	       	dout2.setup(agentin='din2', devip='192.168.2.2', secure=True)
+	       	dout3.setup(agentin='din3', devip='192.168.3.2', secure=True)
+		
+	bess.attach_task(module_name=dout0.name, wid=1)
+	bess.attach_task(module_name=dout1.name, wid=2)
+	bess.attach_task(module_name=dout2.name, wid=1)
+	bess.attach_task(module_name=dout3.name, wid=2)	
+
+	dout0:1 -> po0 
+	dout1:1 -> po1
+	dout2:1 -> po0 
+	dout3:1 -> po1
+
+	pi0 -> ipfwd0
+	pi1 -> ipfwd1
+	pi2 -> dout0 -> po0
+	pi3 -> dout2 -> po0
+	pi4 -> dout1 -> po1
+	pi5 -> dout3 -> po1
+
+	ipfwd0:0 -> din0 -> po2
+	ipfwd0:1 -> din2 -> po3
+	ipfwd1:0 -> din1 -> po4
+	ipfwd1:1 -> din3 -> po5
+else:
+	pi0 -> ipfwd0
+	pi1 -> ipfwd1
+	pi2 -> po0
+	pi3 -> po0
+	pi4 -> po1
+	pi5 -> po1
+
+	ipfwd0:0 -> po2
+	ipfwd0:1 -> po3
+	ipfwd1:0 -> po4
+	ipfwd1:1 -> po5
+
+os.system('sleep 2')
+os.system('sudo bash /u/ronaldof/qemu-proxy0/script-1.sh')
+os.system('sudo bash /u/ronaldof/qemu-proxy1/script-1.sh')
+os.system('sleep 2')

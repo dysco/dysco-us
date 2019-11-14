@@ -1,0 +1,89 @@
+import os
+import random
+import scapy.all as scapy
+
+dysco = int($DYSCO!'0')
+
+# Parameters sanity check
+assert(0 <= dysco <= 1)
+
+os.system('sudo pkill -9 iperf 1>/dev/null 2>/dev/null')	
+os.system('sudo ip netns add h1 1>/dev/null 2>/dev/null')
+os.system('sudo ip netns add h2 1>/dev/null 2>/dev/null')
+os.system('sudo ip netns add mb1 1>/dev/null 2>/dev/null')
+os.system('sudo ip netns add mb2 1>/dev/null 2>/dev/null')
+
+port_h1 = PMDPort(name='port_h1', vdev='eth_tap0,iface=h1-0')
+port_h2 = PMDPort(name='port_h2', vdev='eth_tap1,iface=h2-0')
+port_mb11 = PMDPort(name='port_mb10', vdev='eth_tap2,iface=mb1-0')
+port_mb12 = PMDPort(name='port_mb11', vdev='eth_tap3,iface=mb1-1')
+port_mb21 = PMDPort(name='port_mb20', vdev='eth_tap4,iface=mb2-0')
+port_mb22 = PMDPort(name='port_mb21', vdev='eth_tap5,iface=mb2-1')
+
+os.system('sudo bash ./setting.sh 1>/dev/null 2>/dev/null') 
+
+ipfwd=IPLookup()
+ipfwd.add(prefix='192.168.1.0', prefix_len=24, gate=0)
+ipfwd.add(prefix='192.168.2.0', prefix_len=24, gate=1)
+ipfwd.add(prefix='192.168.3.0', prefix_len=24, gate=2)
+ipfwd.add(prefix='192.168.4.0', prefix_len=24, gate=3)
+ipfwd.add(prefix='192.168.5.0', prefix_len=24, gate=4)
+ipfwd.add(prefix='192.168.6.0', prefix_len=24, gate=5)
+
+if dysco == 1:
+   dyscocenter::DyscoCenter()
+   dyscocenter.add(ns='h1', priority=1, sc_len=1, chain=['192.168.6.1'], filter='dst port 5001')
+   dyscocenter.add(ns='h1', priority=2, sc_len=2, chain=['192.168.2.1', '192.168.6.1'], filter='dst port 5002')
+   dyscocenter.add(ns='h1', priority=3, sc_len=3, chain=['192.168.2.1', '192.168.4.1', '192.168.6.1'], filter='dst port 5003')
+
+   din0=DyscoAgentIn(name='din0', ns='h1')
+   din1=DyscoAgentIn(name='din1', ns='h2')
+   din2=DyscoAgentIn(name='din2', ns='mb1')
+   din3=DyscoAgentIn(name='din3', ns='mb1')
+   din4=DyscoAgentIn(name='din4', ns='mb2')
+   din5=DyscoAgentIn(name='din5', ns='mb2')
+   dout0=DyscoAgentOut(name='dout0', ns='h1')  
+   dout1=DyscoAgentOut(name='dout1', ns='h2')  
+   dout2=DyscoAgentOut(name='dout2', ns='mb1')  
+   dout3=DyscoAgentOut(name='dout3', ns='mb1')  
+   dout4=DyscoAgentOut(name='dout4', ns='mb2')  
+   dout5=DyscoAgentOut(name='dout5', ns='mb2')  
+   dout0.setup(agentin='din0', devip='192.168.1.1', secure=False)
+   dout1.setup(agentin='din1', devip='192.168.6.1', secure=False)
+   dout2.setup(agentin='din2', devip='192.168.2.1', secure=False)
+   dout3.setup(agentin='din3', devip='192.168.3.1', secure=False)
+   dout4.setup(agentin='din4', devip='192.168.4.1', secure=False)
+   dout5.setup(agentin='din5', devip='192.168.5.1', secure=False)
+
+   PortInc(port=port_h1.name) -> dout0 -> ipfwd
+   PortInc(port=port_h2.name) -> dout1 -> ipfwd
+   PortInc(port=port_mb11.name) -> dout2 -> ipfwd
+   PortInc(port=port_mb12.name) -> dout3 -> ipfwd
+   PortInc(port=port_mb21.name) -> dout4 -> ipfwd
+   PortInc(port=port_mb22.name) -> dout5 -> ipfwd
+
+   ipfwd:0 -> din0 -> PortOut(port=port_h1.name)
+   ipfwd:1 -> din2 -> PortOut(port=port_mb11.name)
+   ipfwd:2 -> din3 -> PortOut(port=port_mb12.name)
+   ipfwd:3 -> din4 -> PortOut(port=port_mb21.name)
+   ipfwd:4 -> din5 -> PortOut(port=port_mb22.name)
+   ipfwd:5 -> din1 -> PortOut(port=port_h2.name)
+
+else:
+   PortInc(port=port_h1.name) -> ipfwd
+   PortInc(port=port_h2.name) -> ipfwd
+   PortInc(port=port_mb11.name) -> ipfwd
+   PortInc(port=port_mb12.name) -> ipfwd
+   PortInc(port=port_mb21.name) -> ipfwd
+   PortInc(port=port_mb22.name) -> ipfwd
+
+   ipfwd:0 -> PortOut(port=port_h1.name)
+   ipfwd:1 -> PortOut(port=port_mb11.name)
+   ipfwd:2 -> PortOut(port=port_mb12.name)
+   ipfwd:3 -> PortOut(port=port_mb21.name)
+   ipfwd:4 -> PortOut(port=port_mb22.name)
+   ipfwd:5 -> PortOut(port=port_h2.name)
+
+os.system('sudo ip netns exec h2 iperf -s -p 5001 1>/dev/null 2>/dev/null &')
+os.system('sudo ip netns exec h2 iperf -s -p 5002 1>/dev/null 2>/dev/null &')
+os.system('sudo ip netns exec h2 iperf -s -p 5003 1>/dev/null 2>/dev/null &')

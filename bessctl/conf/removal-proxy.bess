@@ -1,0 +1,77 @@
+import os
+
+dysco = int($DYSCO!'0')
+secure = int($SECURE!'0')
+
+assert(0 <= dysco <= 1)
+assert(0 <= secure <= 1)
+
+os.system('sudo ifconfig enp134s0f0 down 1>/dev/null 2>/dev/null')
+os.system('sudo ifconfig enp134s0f1 down 1>/dev/null 2>/dev/null')
+os.system('sudo mkdir -p /tmp/bessd 1>/dev/null 2>/dev/null')
+os.system('sudo rm -f /tmp/bessd/vhost_*.sock 1>/dev/null 2>/dev/null')
+os.system("sudo ps -axf | grep qemu | awk -F ' ' '{print $1}' | xargs kill -9 2>/dev/null")
+
+bess.add_worker(wid=1,core=11)
+bess.add_worker(wid=2,core=12)
+bess.add_worker(wid=3,core=13)
+bess.add_worker(wid=4,core=14)
+
+vdev_str0 = 'eth_vhost0,iface=/tmp/bessd/vhost_proxy0_0.sock,queues=1'
+vdev_str1 = 'eth_vhost1,iface=/tmp/bessd/vhost_proxy0_1.sock,queues=1'
+
+PMDPort(name='port_mlx0', port_id=0, num_inc_q=1, num_out_q=1)
+PMDPort(name='port_mlx1', port_id=1, num_inc_q=1, num_out_q=1)
+PMDPort(name='port_proxy0_0', vdev=vdev_str0, num_inc_q=1, num_out_q=1)
+PMDPort(name='port_proxy0_1', vdev=vdev_str1, num_inc_q=1, num_out_q=1)
+
+pi0=PortInc(name='port_inc0', port='port_mlx0', prefetch=True)
+pi1=PortInc(name='port_inc1', port='port_mlx1', prefetch=True)
+pi2=PortInc(name='port_inc2', port='port_proxy0_0', prefetch=True)
+pi3=PortInc(name='port_inc3', port='port_proxy0_1', prefetch=True)
+po0=PortOut(name='port_out0', port='port_mlx0')
+po1=PortOut(name='port_out1', port='port_mlx1')
+po2=PortOut(name='port_out2', port='port_proxy0_0')
+po3=PortOut(name='port_out3', port='port_proxy0_1')
+
+bess.attach_task(module_name=pi0.name, wid=1)
+bess.attach_task(module_name=pi1.name, wid=2)
+bess.attach_task(module_name=pi2.name, wid=3)
+bess.attach_task(module_name=pi3.name, wid=4)
+
+if dysco == 1:
+        dyscocenter::DyscoCenter()
+	dyscocenter.add(priority=1, sc_len=1, ns='proxy0', chain=['192.168.4.1'], filter='ip dst 192.168.4.1 and dst port 5001')
+	dyscocenter.add(priority=2, sc_len=1, ns='proxy0', chain=['192.168.4.2'], filter='ip dst 192.168.4.2 and dst port 5002')
+	dyscocenter.add(priority=3, sc_len=1, ns='proxy0', chain=['192.168.4.3'], filter='ip dst 192.168.4.3 and dst port 5003')
+	dyscocenter.add(priority=4, sc_len=1, ns='proxy0', chain=['192.168.4.4'], filter='ip dst 192.168.4.4 and dst port 5004')
+
+        dout0=DyscoAgentOut(name='dout0', ns='proxy0')
+        dout1=DyscoAgentOut(name='dout1', ns='proxy0')
+        din0=DyscoAgentIn(name='din0', ns='proxy0')
+        din1=DyscoAgentIn(name='din1', ns='proxy0')
+	if secure == 0:
+	    	dout0.setup(agentin='din0', devip='192.168.2.1', secure=False)
+		dout1.setup(agentin='din1', devip='192.168.3.1', secure=False)
+	else:
+		dout0.setup(agentin='din0', devip='192.168.2.1', secure=True)
+		dout1.setup(agentin='din1', devip='192.168.3.1', secure=True)
+		
+	bess.attach_task(module_name=dout0.name, wid=3)
+	bess.attach_task(module_name=dout1.name, wid=4)	
+
+	dout0:1 -> po0 
+	dout1:1 -> po1
+	pi0 -> din0 -> po2
+	pi2 -> dout0 -> po0
+	pi1 -> din1 -> po3
+	pi3 -> dout1 -> po1
+else:
+	pi0 -> po2
+	pi2 -> po0
+	pi1 -> po3
+	pi3 -> po1
+
+os.system('sleep 2')
+os.system('sudo bash /u/ronaldof/qemu-proxy0/script-1.sh')
+os.system('sleep 2')

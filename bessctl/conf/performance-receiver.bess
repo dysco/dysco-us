@@ -1,0 +1,48 @@
+import os
+import scapy.all as scapy
+
+dysco = int($DYSCO!'0')
+num_cores = int($BESS_CORES!'1')
+
+# Parameters sanity check
+assert(0 <= dysco <= 1)
+assert(1 <= num_cores <= 18)
+
+os.system('sudo ifconfig enp134s0f0 down 1>/dev/null 2>/dev/null')
+os.system('sudo ifconfig enp134s0f1 down 1>/dev/null 2>/dev/null')
+os.system('sudo mkdir -p /tmp/bessd 1>/dev/null 2>/dev/null')
+os.system('sudo rm -f /tmp/bessd/vhost_*.sock 1>/dev/null 2>/dev/null')
+os.system("sudo ps -axf | grep qemu | awk -F ' ' '{print $1}' | xargs kill -9 2>/dev/null")
+
+core_list = [11,12,13,14,15,16,17,18,19,31,32,33,34,35,36,37,38,39]
+for i in range(num_cores):
+    bess.add_worker(wid=i, core=core_list[i])
+
+PMDPort(name='mlx0', port_id=0, num_inc_q=num_cores, num_out_q=0)
+#PMDPort(name='mlx0', port_id=0, num_inc_q=num_cores, num_out_q=num_cores)
+
+if dysco == 1:
+     dyscocenter::DyscoCenter()
+     
+     for i in range(num_cores):
+     	 d_name = 'din%d' % (i)
+     	 q_name = 'queue_out%d' % (i)
+	 if num_cores == 1:
+	       q=PortInc(name=q_name, port='mlx0', prefetch=True)
+	    else:
+	       q=QueueInc(name=q_name, port='mlx0', qid=i, prefetch=True)
+
+	 d=DyscoAgentIn(name=d_name, wid=i)
+	 s=Sink()
+	 q -> d -> s
+	 bess.attach_task(module_name=q_name, wid=i)
+else:
+	for i in range(num_cores):
+	    q_name = 'queue_out%d' % (i)
+	    q=QueueInc(name=q_name, port='mlx0', qid=i, prefetch=True)
+	    c1=IPChecksum()
+    	    c2=L4Checksum()
+	    s=Sink()
+	    
+	    q -> c1 -> s
+	    bess.attach_task(module_name=q_name, wid=i)

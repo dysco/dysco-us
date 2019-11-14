@@ -1,0 +1,84 @@
+import os
+import scapy.all as scapy
+
+dysco = int($DYSCO!'0')
+size = int($TCP_SIZE!'64')
+num_cores = int($BESS_CORES!'1')
+
+# Parameters sanity check
+assert(0 <= dysco <= 1)
+assert(64 <= size <= 1518)
+assert(1 <= num_cores <= 18)
+
+port_range = int($TCP_RANGE!num_cores)
+assert(num_cores <= port_range <= 65535)
+
+os.system('sudo ifconfig enp134s0f0 down 1>/dev/null 2>/dev/null')
+os.system('sudo ifconfig enp134s0f1 down 1>/dev/null 2>/dev/null')
+os.system('sudo mkdir -p /tmp/bessd 1>/dev/null 2>/dev/null')
+os.system('sudo rm -f /tmp/bessd/vhost_*.sock 1>/dev/null 2>/dev/null')
+os.system("sudo ps -axf | grep qemu | awk -F ' ' '{print $1}' | xargs kill -9 2>/dev/null")
+
+core_list = [11,12,13,14,15,16,17,18,19,31,32,33,34,35,36,37,38,39]
+#core_list = [31,32,33,34,35,36,37,38,39,11,12,13,14,15,16,17,18,19]
+#core_list = [10,30,11,31,12,32,13,33,14,34,15,35,16,36,17,37,18,38,19,39]
+
+for i in range(num_cores):
+    bess.add_worker(wid=i, core=core_list[i])
+    
+def build_hdr(i):
+    eth = scapy.Ether(src='52:54:00:12:34:00', dst='52:54:00:12:34:30') #52:54:00:12:34:30 (for cabino as L2 Switching)
+    ip = scapy.IP(src='192.168.1.1', dst='192.168.2.1')
+    tcp = scapy.TCP(sport=i, dport=5001, flags="A")
+    pkt = eth/ip/tcp
+
+    return bytes(pkt)
+
+hdr_i = 1
+hdrs = [[]]
+per_core = port_range/num_cores
+for i in range(num_cores):
+    hdrs.append([])
+    for j in range(per_core):
+    	hdrs[i].append(build_hdr(hdr_i))
+	hdr_i += 1
+	
+PMDPort(name='mlx0', port_id=0, num_inc_q=0, num_out_q=num_cores)
+#PMDPort(name='mlx0', port_id=0, num_inc_q=num_cores, num_out_q=num_cores)
+   
+if dysco == 1:
+   dyscocenter::DyscoCenter()
+   dyscocenter.add(priority=1, sc_len=1, chain=['192.168.2.1'], filter='dst port 5001')
+
+   for i in range(num_cores):
+       d_name = 'dout%d' % (i)
+       q_name = 'queue_out%d' % (i)
+       src_name = 'src%d' % (i)
+
+       s=TcpSessionSource(name=src_name, headers=hdrs[i], pkt_size=size)
+       d=DyscoAgentOut(name=d_name)
+       d.setup(devip='192.168.1.1', wid=i, secure=False)
+       if num_cores == 1:
+       	  q=PortOut(name=q_name, port='mlx0')
+       else:
+          q=QueueOut(name=q_name, port='mlx0', qid=i)
+
+       s -> d -> q
+       
+       s.start()
+       bess.attach_task(module_name=src_name, wid=i)
+else:
+	for i in range(num_cores):
+	    q_name = 'queue_out%d' % (i)
+	    src_name = 'src%d' % (i)
+
+	    s=TcpSessionSource(name=src_name, headers=hdrs[i], pkt_size=size)
+	    q=QueueOut(name=q_name, port='mlx0', qid=i)
+	    c1=IPChecksum()
+	    c2=L4Checksum()
+
+	    #s -> c1 -> c2 -> q
+	    s -> c1 -> q
+
+	    s.start()
+	    bess.attach_task(module_name=src_name, wid=i)

@@ -1,0 +1,113 @@
+import os
+
+dysco = int($DYSCO!'0')
+secure = int($SECURE!'0')
+
+assert(0 <= dysco <= 1)
+assert(0 <= secure <= 1)
+
+os.system('sudo ifconfig enp134s0f0 down 1>/dev/null 2>/dev/null')
+os.system('sudo ifconfig enp134s0f1 down 1>/dev/null 2>/dev/null')
+os.system('sudo mkdir -p /tmp/bessd 1>/dev/null 2>/dev/null')
+os.system('sudo rm -f /tmp/bessd/vhost_*.sock 1>/dev/null 2>/dev/null')
+os.system("sudo ps -axf | grep qemu | awk -F ' ' '{print $1}' | xargs kill -9 2>/dev/null")
+
+bess.add_worker(wid=1,core=11)
+bess.add_worker(wid=2,core=12)
+bess.add_worker(wid=3,core=13)
+bess.add_worker(wid=4,core=14)
+bess.add_worker(wid=5,core=15)
+bess.add_worker(wid=6,core=16)
+bess.add_worker(wid=7,core=17)
+
+vdev_str0 = 'eth_vhost0,iface=/tmp/bessd/vhost_client0.sock,queues=1'
+vdev_str1 = 'eth_vhost1,iface=/tmp/bessd/vhost_client1.sock,queues=1'
+vdev_str2 = 'eth_vhost2,iface=/tmp/bessd/vhost_client2.sock,queues=1'
+
+PMDPort(name='port_mlx0', port_id=0, num_inc_q=1, num_out_q=1)
+PMDPort(name='port_client0', vdev=vdev_str0, num_inc_q=1, num_out_q=1)
+PMDPort(name='port_client1', vdev=vdev_str1, num_inc_q=1, num_out_q=1)
+PMDPort(name='port_client2', vdev=vdev_str2, num_inc_q=1, num_out_q=1)
+
+ipfwd::IPLookup()
+ipfwd.add(prefix='192.168.1.1', prefix_len=32, gate=0)
+ipfwd.add(prefix='192.168.1.2', prefix_len=32, gate=1)
+ipfwd.add(prefix='192.168.1.3', prefix_len=32, gate=2)
+ipfwd.add(prefix='0.0.0.0', prefix_len=0, gate=4)
+
+q0=Queue(name='queue0', prefetch=True)
+q1=Queue(name='queue1', prefetch=True)
+q2=Queue(name='queue2', prefetch=True)
+q3=Queue(name='queue3', prefetch=True)
+
+pi0=PortInc(name='port_inc0', port='port_mlx0', prefetch=True)
+pi1=PortInc(name='port_inc1', port='port_client0', prefetch=True)
+pi2=PortInc(name='port_inc2', port='port_client1', prefetch=True)
+pi3=PortInc(name='port_inc3', port='port_client2', prefetch=True)
+po0=PortOut(name='port_out0', port='port_mlx0')
+po1=PortOut(name='port_out1', port='port_client0')
+po2=PortOut(name='port_out2', port='port_client1')
+po3=PortOut(name='port_out3', port='port_client2')
+
+bess.attach_task(module_name=pi0.name, wid=1)
+bess.attach_task(module_name=pi1.name, wid=2)
+bess.attach_task(module_name=pi2.name, wid=3)
+bess.attach_task(module_name=pi3.name, wid=4)
+
+if dysco == 1:
+	dyscocenter::DyscoCenter()
+	
+	dout0=DyscoAgentOut(name='dout0', ns='client0')
+	dout1=DyscoAgentOut(name='dout1', ns='client1')
+	dout2=DyscoAgentOut(name='dout2', ns='client2')
+	din0=DyscoAgentIn(name='din0', wid=2, ns='client0')	
+	din1=DyscoAgentIn(name='din1', wid=3, ns='client1')	
+	din2=DyscoAgentIn(name='din2', wid=4, ns='client2')
+	if secure == 0:
+	   	dout0.setup(agentin='din0', devip='192.168.1.1', secure=False, wid=2)
+		dout1.setup(agentin='din1', devip='192.168.1.2', secure=False, wid=3)
+		dout2.setup(agentin='din2', devip='192.168.1.3', secure=False, wid=4)
+	else:
+		dout0.setup(agentin='din0', devip='192.168.1.1', secure=True, wid=2)
+		dout1.setup(agentin='din1', devip='192.168.1.2', secure=True, wid=3)
+		dout2.setup(agentin='din2', devip='192.168.1.3', secure=True, wid=4)
+
+	bess.attach_task(module_name=dout0.name, wid=2)
+	bess.attach_task(module_name=dout1.name, wid=3)
+	bess.attach_task(module_name=dout2.name, wid=4)
+
+	bess.attach_task(module_name=q0.name, wid=5)
+	bess.attach_task(module_name=q1.name, wid=2)
+	bess.attach_task(module_name=q2.name, wid=3)
+	bess.attach_task(module_name=q3.name, wid=4)
+	
+	dout0:1 -> q0
+	dout1:1 -> q0
+	dout2:1 -> q0
+	
+	pi0 -> q0
+	pi1 -> dout0 -> q0
+	pi2 -> dout1 -> q0
+	pi3 -> dout2 -> q0
+	q0 -> ipfwd
+	
+	ipfwd:0 -> q1 -> din0 -> po1
+	ipfwd:1 -> q2 -> din1 -> po2
+	ipfwd:2 -> q3 -> din2 -> po3
+	ipfwd:4 -> po0
+	
+else:
+	pi0 -> ipfwd
+	pi1 -> ipfwd
+	pi2 -> ipfwd
+	pi3 -> ipfwd
+	ipfwd:0 -> po1
+	ipfwd:1 -> po2
+	ipfwd:2 -> po3
+	ipfwd:4 -> po0
+
+os.system('sleep 2')
+os.system('sudo bash /u/ronaldof/qemu-client0/script-1.sh')
+os.system('sudo bash /u/ronaldof/qemu-client1/script-1.sh')
+os.system('sudo bash /u/ronaldof/qemu-client2/script-1.sh')
+os.system('sleep 2')

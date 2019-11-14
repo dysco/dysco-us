@@ -1,0 +1,64 @@
+import os
+
+dysco = int($DYSCO!'0')
+secure = int($SECURE!'0')
+
+assert(0 <= dysco <= 1)
+assert(0 <= secure <= 1)
+
+os.system('sudo ifconfig enp134s0f0 down 1>/dev/null 2>/dev/null')
+os.system('sudo ifconfig enp134s0f1 down 1>/dev/null 2>/dev/null')
+os.system('sudo mkdir -p /tmp/bessd 1>/dev/null 2>/dev/null')
+os.system('sudo rm -f /tmp/bessd/vhost_*.sock 1>/dev/null 2>/dev/null')
+os.system("sudo ps -axf | grep qemu | awk -F ' ' '{print $1}' | xargs kill -9 2>/dev/null")
+
+bess.add_worker(wid=1,core=11)
+
+vdev_str0 = 'eth_vhost0,iface=/tmp/bessd/vhost_client0.sock,queues=1'
+
+PMDPort(name='port_mlx0', port_id=0, num_inc_q=1, num_out_q=1)
+PMDPort(name='port_client0', vdev=vdev_str0, num_inc_q=1, num_out_q=1)
+
+ipfwd::IPLookup()
+ipfwd.add(prefix='192.168.1.1', prefix_len=32, gate=0)
+ipfwd.add(prefix='192.168.1.2', prefix_len=32, gate=1)
+ipfwd.add(prefix='192.168.1.3', prefix_len=32, gate=2)
+ipfwd.add(prefix='192.168.1.4', prefix_len=32, gate=3)
+ipfwd.add(prefix='0.0.0.0', prefix_len=0, gate=4)
+
+q0=Queue(name='queue0', prefetch=True)
+q1=Queue(name='queue1', prefetch=True)
+
+pi0=PortInc(name='port_inc0', port='port_mlx0', prefetch=True)
+pi1=PortInc(name='port_inc1', port='port_client0', prefetch=True)
+po0=PortOut(name='port_out0', port='port_mlx0')
+po1=PortOut(name='port_out1', port='port_client0')
+
+if dysco == 1:
+	dyscocenter::DyscoCenter()
+	dyscocenter.add(priority=1, sc_len=2, ns='client0', chain=['192.168.2.1', '192.168.4.1'], filter='dst port 5001')
+
+	dout0=DyscoAgentOut(name='dout0', ns='client0')
+	din0=DyscoAgentIn(name='din0', wid=2, ns='client0')
+	if secure == 0:
+	   	dout0.setup(agentin='din0', devip='192.168.1.1', secure=False, wid=2)
+	else:
+	   	dout0.setup(agentin='din0', devip='192.168.1.1', secure=True, wid=2)
+
+	dout0:1 -> q0
+	
+	pi0 -> q0
+	pi1 -> dout0 -> q0
+	q0 -> ipfwd
+	
+	ipfwd:0 -> q1 -> din0 -> po1
+	ipfwd:4 -> po0
+	
+else:
+	pi0 -> ipfwd
+	pi1 -> qo0
+	ipfwd:0 -> q0 -> po1
+
+os.system('sleep 2')
+os.system('sudo bash /u/ronaldof/qemu-client0/script-1.sh')
+os.system('sleep 2')
